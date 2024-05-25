@@ -1,56 +1,20 @@
-from Table_class import Table
-from Strategies import strategy
-
-from datetime import datetime
-import pytz
 import os
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+from SocKult_Player_class import Player
+from SocKult_Table_class import Table
 
-#Change to your own path 
-os.chdir("D:\AU_Cog_Sci\matematik_tilvalg\intro_prog\exam_project\IPSA_project_handin")
+# Change to your own path
+os.chdir("D:\\AU_Cog_Sci\\socKult\\social_and_cultural_dynamics_MST_exam")
 
+player_1 = Player('player_1', 1000)
+player_2 = Player('player_2', 1000)
+player_3 = Player('player_3', 1000)
 
-def save_main_plot(data, x_axis, y_axis, filter, folder):
-  sns.set(style='whitegrid')
-  plt.figure(figsize=(10, 6))
-  sns.lineplot(data=data, x=x_axis, y=y_axis, hue=filter)
-  plt.title('{} Over {} by {}'.format(y_axis, x_axis, filter))
-  plt.xlabel(f'{x_axis}')
-  plt.ylabel(f'{y_axis}')
-  plt.legend(title=f'{filter}')
+player_list = [player_1, player_2, player_3]
 
-  plot_name = '{}/main_plot_{}_{}_{}.png'.format(folder, time_stamp.hour,
-                                                 time_stamp.minute,
-                                                 time_stamp.second)
+number_of_tables = range(1, 11)
 
-  plt.savefig(plot_name, dpi=300, bbox_inches='tight')
-
-  plt.close()
-
-
-time_stamp = datetime.now(pytz.timezone('Europe/Copenhagen'))
-folder = f'plots_{time_stamp.day}_{time_stamp.month}'
-plot_files = []
-
-
-dataframe_columns = [
-    'strategy', 'wealth', 'game_ending', 'games_played', 'player_bet'
-]
-
-main_dataframe = pd.DataFrame(columns=dataframe_columns)
-
-for i in range(len(strategy)):
-  print('----------------------------')
-  print(f'strategy_{i+1}')
-  new_table = Table(1000000, 8, 2500000, 10, strategy[i])
-  new_table.play_games()
-  new_table.print_table_stats()
-  data_frame = new_table.make_dataframe()
-  new_table.save_dataframe()
-  main_dataframe = pd.concat([main_dataframe, data_frame])
-  plot_file = new_table.plot_table_stats(folder)
-  plot_files.append(plot_file)
-
-save_main_plot(main_dataframe, 'games_played', 'wealth', 'strategy', folder)
+for i in number_of_tables:
+    new_table = Table(50, 8, player_list, f'table{i}')
+    new_table.play_games()
+    new_table.make_dataframe()
+    new_table.save_dataframe()
