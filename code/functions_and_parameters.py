@@ -1,16 +1,22 @@
+
 import networkx as nx
 
-# External pressure values (used in campaign and economic scenarios)
-CAMPAIGN_STRENGTH = 0.1  # how strong the education push is (0-1)
+# ----------------------------
+# External pressure parameters
+# ----------------------------
+
+CAMPAIGN_STRENGTH = 0.1  # Strength of the campaign's push (used if scenario == 'campaign')
+
+# Economic scenario parameters
 BASE_MEAT_PRICE = 1.0
 BASE_PLANT_PRICE = 0.7
-MEAT_TAX_MULTIPLIER = 1.3  # meat becomes 30% more expensive
-PLANT_SUBSIDY_MULTIPLIER = 0.8  # plant-based becomes 20% cheaper
+MEAT_TAX_MULTIPLIER = 1.3  # Meat becomes 30% more expensive
+PLANT_SUBSIDY_MULTIPLIER = 0.8  # Plant-based food becomes 20% cheaper
 
 def compute_price_effect(price_sensitivity):
     """
-    Returns an adjustment score based on relative price of plant vs. meat.
-    Higher difference + higher sensitivity => stronger push to sustainable behavior.
+    Calculate the effect of price differences on sustainability behavior.
+    Scales with an agent's price_sensitivity.
     """
     taxed_meat_price = BASE_MEAT_PRICE * MEAT_TAX_MULTIPLIER
     subsidized_plant_price = BASE_PLANT_PRICE * PLANT_SUBSIDY_MULTIPLIER
@@ -18,6 +24,9 @@ def compute_price_effect(price_sensitivity):
     return price_diff * price_sensitivity
 
 
+# ----------------------------
+# Network generation
+# ----------------------------
 
 def generate_network(network_type, num_agents, average_degree, rewiring_prob):
     if network_type == "small_world":
@@ -31,13 +40,16 @@ def generate_network(network_type, num_agents, average_degree, rewiring_prob):
         raise ValueError(f"Unknown network type: {network_type}")
 
 
+# ----------------------------
+# Data collection setup
+# ----------------------------
+
 def get_model_reporters():
     return {
         "AverageSustainability": lambda m: sum(
             a.sustainability_score for a in m.schedule.agents
         ) / len(m.schedule.agents)
     }
- 
 
 def get_agent_reporters():
     return {
@@ -48,4 +60,3 @@ def get_agent_reporters():
         "PriceSensitivity": lambda a: a.price_sensitivity,
         "Scenario": lambda a: a.scenario
     }
-

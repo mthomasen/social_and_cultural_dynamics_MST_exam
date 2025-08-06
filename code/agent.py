@@ -1,15 +1,25 @@
+
 from mesa import Agent
 import random
+from functions_and_parameters import CAMPAIGN_STRENGTH, compute_price_effect
 
 class EaterAgent(Agent):
     def __init__(self, unique_id, model, scenario):
         super().__init__(unique_id, model)
         self.scenario = scenario
-        self.sustainability_score = random.uniform(0, 0.3)  # start mostly unsustainable
-        self.habit_strength = random.uniform(0.2, 0.8)
-        self.threshold = random.uniform(0.3, 0.7)
-        self.campaign_sensitivity = random.uniform(0, 0.5)
-        self.price_sensitivity = random.uniform(0, 1)
+
+        # 10% early adopters with high sustainability
+        if random.random() < 0.1:
+            self.sustainability_score = random.uniform(0.7, 1.0)
+        else:
+            self.sustainability_score = random.uniform(0.0, 0.3)
+
+        # More realistic distributions for traits
+        self.habit_strength = random.betavariate(2, 5)  # most agents resist change moderately
+        self.threshold = random.uniform(0.3, 0.7)  # peer pressure threshold
+        self.campaign_sensitivity = min(1, max(0, random.normalvariate(0.3, 0.2)))
+        self.price_sensitivity = min(1, max(0, random.normalvariate(0.4, 0.15)))
+
         self.neighbors = []
         self.next_score = self.sustainability_score
 
@@ -22,24 +32,24 @@ class EaterAgent(Agent):
             return
 
         avg_peer_score = sum(peer_scores) / len(peer_scores)
-        influence = avg_peer_score - self.sustainability_score
+        social_push = avg_peer_score - self.sustainability_score
 
-        # Start with social influence only
         adjustment = 0
-        if influence > self.threshold:
-            adjustment += (1 - self.habit_strength) * influence
 
-        # Scenario 2: Campaign effect
-        if self.scenario == "campaign":
-            adjustment += self.campaign_sensitivity * 0.1  # base campaign strength
+        # Social influence (only if peer difference > threshold)
+        if social_push > self.threshold:
+            adjustment += (1 - self.habit_strength) * (social_push - self.threshold)
 
-        # Scenario 3: Economic incentives
-        if self.scenario == "economic":
-            price_effect = (0.5 * self.price_sensitivity)  # abstracted price effect
-            adjustment += price_effect
+        # Scenario 2: Campaign effect only between steps 10–30
+        if self.scenario == "campaign" and 10 <= self.model.schedule.time <= 30:
+            adjustment += self.campaign_sensitivity * CAMPAIGN_STRENGTH
 
+        # Scenario 3: Economic pressure introduced at step 20
+        if self.scenario == "economic" and self.model.schedule.time >= 20:
+            adjustment += compute_price_effect(self.price_sensitivity)
+
+        # Apply adjustment, keeping score in [0, 1]
         self.next_score = min(1.0, max(0.0, self.sustainability_score + adjustment))
 
     def advance(self):
         self.sustainability_score = self.next_score
-        
