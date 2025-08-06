@@ -2,11 +2,12 @@ from mesa import Model
 from mesa.time import SimultaneousActivation
 from mesa.datacollection import DataCollector
 from agent import EaterAgent
-from functions_and_parameters import generate_network
-from functions_and_parameters import get_model_reporters
+from functions_and_parameters import generate_network, get_agent_reporters, get_model_reporters
+
 
 class SustainableEatingModel(Model):
     def __init__(self, num_agents, network_type, average_degree, rewiring_prob, scenario, steps):
+        super().__init__()
         self.num_agents = num_agents
         self.network_type = network_type
         self.average_degree = average_degree
@@ -16,7 +17,10 @@ class SustainableEatingModel(Model):
         self.steps = steps
 
         self.G = generate_network(network_type, num_agents, average_degree, rewiring_prob)
-        self.datacollector = DataCollector(model_reporters=get_model_reporters())
+        self.datacollector = DataCollector(
+            model_reporters=get_model_reporters(),
+            agent_reporters=get_agent_reporters()
+            )
 
         # Create agents
         for i in range(self.num_agents):

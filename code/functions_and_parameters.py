@@ -38,3 +38,14 @@ def get_model_reporters():
         ) / len(m.schedule.agents)
     }
  
+
+def get_agent_reporters():
+    return {
+        "Sustainability": lambda a: a.sustainability_score,
+        "Habit": lambda a: a.habit_strength,
+        "Threshold": lambda a: a.threshold,
+        "CampaignSensitivity": lambda a: a.campaign_sensitivity,
+        "PriceSensitivity": lambda a: a.price_sensitivity,
+        "Scenario": lambda a: a.scenario
+    }
+

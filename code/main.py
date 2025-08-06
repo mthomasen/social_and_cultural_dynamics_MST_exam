@@ -34,11 +34,23 @@ for scenario in scenarios:
     # Run simulation
     for _ in range(params["steps"]):
         model.step()
+    
+    agent_df = model.datacollector.get_agent_vars_dataframe()
+    model_df = model.datacollector.get_model_vars_dataframe()
 
+# Ensure 'Step' is a column in both
+    agent_df.index.names = ["Step", "AgentID"]
+    agent_df = agent_df.reset_index()
+
+    model_df.index.name = "Step"
+    model_df = model_df.reset_index()
+
+
+    combined_df = pd.merge(agent_df, model_df, on="Step", how="left")
+    
+    combined_df['Scenario'] = scenario
     # Save results
-    df = pd.DataFrame(model.datacollector.get_model_vars_dataframe())
-    df["Scenario"] = scenario
     filename = os.path.join(data_dir, f"sustainable_eating_{scenario}_{timestamp}.csv")
-    df.to_csv(filename, index=False)
+    combined_df.to_csv(filename, index=False)
 
     print(f"Finished scenario: {scenario}. Results saved to {filename}")
