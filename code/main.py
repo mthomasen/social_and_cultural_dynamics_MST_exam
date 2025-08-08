@@ -59,12 +59,13 @@ def run_monte_carlo(scenario, steps, n_runs=100, seed0=123):
         all_runs.groupby("Step")
         .agg(
             Avg=("AverageSustainability", "mean"),
-            Std=("AverageSustainability", "std"),
+            Std=("AverageSustainability", "std"),      # <- function is "std" (lowercase)
             Share0=("ShareState0", "mean"),
             Share1=("ShareState1", "mean"),
             Share2=("ShareState2", "mean"),
             Share3=("ShareState3", "mean"),
-            Share3Std = ("ShareState3","Std"),
+            # Optional: add this if you want CI bars for Final State 3 in sweeps:
+            # Share3Std=("ShareState3", "std"),
             Gini=("GiniScore", "mean"),
             Velocity=("AdoptionVelocity", "mean"),
             PeerEvents=("PeerInfluenceEvents", "mean"),

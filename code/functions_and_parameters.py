@@ -93,7 +93,7 @@ def generate_multiplex(num_agents: int, seed=None):
             G_off.add_edge(a, b)
 
     # Online: Barabási–Albert with a deterministic seed
-    ba_seed = int(rng.randint(0, 2**32 - 1))
+    ba_seed = int(np.random.randint(0, np.iinfo(np.int32).max))  
     G_on = nx.barabasi_albert_graph(num_agents, m=2, seed=ba_seed)
     return G_off, G_on, tribes
 # ----------------------------
