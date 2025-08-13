@@ -26,5 +26,5 @@ The code simulates three scenarios
 
 
 
-All agents start with a certain diet, omnivore, flexitarian or vegetarian not and have unique traits like habit strength, sensitivity to prices and they openness to campaigns, the changes in their eating behavior is based on peer presure, educational campaigns and difference in food prices
+All agents start with unique traits like habit strength, sensitivity to prices and they openness to campaigns, the changes in their eating behavior is based on peer presure, educational campaigns and difference in food prices
 
