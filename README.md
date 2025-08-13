@@ -6,16 +6,14 @@ Further my zotero library and all referenced papers is also uploaded
 
 
 
-Code folder:
+Code :
 
-* main.py - Imports model, sets key parameters, runs simulation and saves results
-* model.py - Mesa model and setup
-* agent.py - Agent class with behavioral logic
-* functions\_and\_parameters.py - collection of functions and parameters made and used
-* plots.py - functions used to generate plots
-* sweeps.py - functions used to sweep the backlash, campaign half-life and tax max to look at robustness
-
-
+* code/main.py – runs 4 scenarios (social/campaign/economic/combo), saves CSVs, figures, and endpoint summary.
+* code/model.py – Mesa model setup (multiplex network, schedule, DataCollector).
+* code/agent.py – behavioral rules (four states 0–3, habit/threshold/identity, peer backlash).
+* code/functions\_and\_parameters.py – parameters, multiplex generator, metrics (Gini, tax signal).
+* code/plots.py – helper functions for CI trend, state shares, velocity, peer events, Gini, tax signal.
+* code/sweeps.py – parameter sweeps (+ 95% CIs): BACKLASH\_SCALE, CAMPAIGN\_HALF\_LIFE, TAX\_MAX.
 
 
 
@@ -29,8 +27,4 @@ The code simulates three scenarios
 
 
 All agents start with a certain diet, omnivore, flexitarian or vegetarian not and have unique traits like habit strength, sensitivity to prices and they openness to campaigns, the changes in their eating behavior is based on peer presure, educational campaigns and difference in food prices
-
-
-
-
 

@@ -1,0 +1,324 @@
+---
+title: "ABM sustainable eating - Statisticalanalysis"
+author: M. Skov Thomasen
+output: html_document
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(tidyverse, lme4, lmerTest, glmmTMB, DHARMa, performance,
+               survival, coxme, survminer, patchwork, knitr, janitor)
+
+theme_set(theme_minimal(base_size = 11))
+
+here_code <- normalizePath(getwd())
+data_dir  <- normalizePath(file.path(here_code, "..", "data"))
+
+```
+
+Loading in the data
+```{r}
+scenarios <- c("social","campaign","economic","combo")
+target    <- 0.80
+
+
+latest_by_scenario <- function(dir, scenario, pattern = "sustainable_eating_%s_allruns_*.csv") {
+  pats  <- sprintf(pattern, scenario)
+  files <- list.files(dir, pattern = glob2rx(pats), full.names = TRUE)
+  if (length(files) == 0) return(NA_character_)
+  files[order(file.mtime(files), decreasing = TRUE)][1]
+}
+paths <- setNames(vapply(scenarios, latest_by_scenario, character(1), dir = data_dir), scenarios)
+knitr::kable(tibble(scenario = names(paths), file = basename(paths)), caption = "Files used")
+
+```
+
+Read files, clean names aso.
+```{r}
+read_one <- function(path, scenario) readr::read_csv(path, show_col_types = FALSE) %>% mutate(Scenario = scenario)
+
+allruns <- purrr::imap_dfr(paths, ~ read_one(.x, .y)) %>% clean_names()
+stopifnot(all(c("step","average_sustainability","share_state3","gini_score",
+                "adoption_velocity","peer_influence_events") %in% names(allruns)))
+allruns$scenario <- factor(allruns$scenario, levels = scenarios)
+last_step <- max(allruns$step, na.rm = TRUE)
+
+
+knitr::kable(allruns %>% count(scenario) %>% rename(rows = n), caption = "Row counts by scenario")
+
+```
+
+Building per-run endpoints for all models
+```{r}
+squeeze01 <- function(p, n = 1000) (p * (n - 1) + 0.5) / n
+
+endpoints <- allruns %>%
+  group_by(scenario, run) %>%
+  arrange(step, .by_group = TRUE) %>%
+  summarise(
+    final_avg     = average_sustainability[which.max(step)],
+    final_share3  = share_state3[which.max(step)],
+    final_gini    = gini_score[which.max(step)],
+    time_to_target = { hit <- which(average_sustainability >= target)
+                       if (length(hit) == 0) NA_real_ else min(hit) },
+    reached_target = !is.na(time_to_target),
+    peak_velocity      = max(adoption_velocity, na.rm = TRUE),
+    peak_velocity_step = step[which.max(adoption_velocity)],
+    .groups = "drop"
+  ) %>%
+  mutate(run = as.factor(run),
+         final_share3_s = squeeze01(final_share3))
+
+knitr::kable(endpoints %>%
+        group_by(scenario) %>%
+        summarise(across(c(final_avg, final_share3, final_gini,
+                           peak_velocity, peak_velocity_step), ~mean(.x, na.rm=TRUE)),
+                  reached_rate = mean(reached_target),
+                  .groups="drop"),
+      digits = 3, caption = "Descriptives (means across runs)")
+
+```
+
+##Model 1
+Fitting linear mixed effect model, printing summary
+```{r}
+m_finalavg <- lmer(final_avg ~ scenario + (1 | run), data = endpoints)
+summary(m_finalavg)
+
+```
+
+Assumption checks for model 1
+```{r}
+performance::check_model(m_finalavg)
+performance::check_heteroscedasticity(m_finalavg)
+performance::check_normality(m_finalavg)
+performance::check_outliers(m_finalavg)
+performance::icc(m_finalavg)
+
+```
+
+##Model 2
+Fit beta general linear mixed effect model, printing summary
+```{r}
+m_share3 <- glmmTMB(final_share3_s ~ scenario + (1 | run),
+                    data = endpoints,
+                    family = beta_family(link = "logit"))
+summary(m_share3)
+
+```
+
+
+Assumption checks for model 2
+```{r}
+simres <- DHARMa::simulateResiduals(m_share3, n = 500)
+plot(simres)
+DHARMa::testUniformity(simres)
+DHARMa::testDispersion(simres)
+DHARMa::testOutliers(simres)
+DHARMa::testZeroInflation(simres)
+
+```
+
+##Model 3
+Preparing the survival data
+```{r}
+tt <- endpoints %>%
+  transmute(run, scenario,
+            time   = ifelse(is.na(time_to_target), last_step, time_to_target),
+            status = as.integer(!is.na(time_to_target)))
+knitr::kable(tt %>% count(scenario, status) %>% pivot_wider(names_from = status, values_from = n, values_fill = 0),
+      caption = "Counts (status: 1=reached, 0=censored)")
+
+```
+
+Fitting frailty cox model, print summary
+```{r}
+cox_frailty <- coxme(Surv(time, status) ~ scenario + (1 | run), data = tt)
+cox_frailty
+
+```
+
+
+PH diagnostics and KM curves
+```{r}
+cox_robust <- coxph(Surv(time, status) ~ scenario + cluster(run), data = tt)
+summary(cox_robust)
+ph <- cox.zph(cox_robust); ph
+plot(ph)
+
+```
+
+```{r}
+sf <- survfit(Surv(time, status) ~ scenario, data = tt)
+km_plot <- ggsurvplot(sf, risk.table = TRUE, conf.int = TRUE, censor = TRUE,
+                      ggtheme = theme_minimal(), legend.title = "Scenario")
+km_plot$plot
+
+```
+
+##Model 4
+Fitting linear mixed effect model, print summary
+```{r}
+m_peakstep <- lmer(peak_velocity_step ~ scenario + (1 | run), data = endpoints)
+summary(m_peakstep)
+
+```
+
+
+Assumptions checks for model 4
+```{r}
+performance::check_model(m_peakstep)
+performance::check_heteroscedasticity(m_peakstep)
+performance::check_normality(m_peakstep)
+performance::check_outliers(m_peakstep)
+performance::icc(m_peakstep)
+
+```
+
+
+##Model 5
+Fitting linear mixed effect model, printing summary
+```{r}
+m_gini <- lmer(final_gini ~ scenario + (1 | run), data = endpoints)
+summary(m_gini)
+
+```
+
+Assumption checks for model 5
+```{r}
+performance::check_model(m_gini)
+performance::check_heteroscedasticity(m_gini)
+performance::check_normality(m_gini)
+performance::check_outliers(m_gini)
+performance::icc(m_gini)
+
+```
+
+Average Gini over time
+```{r}
+gini_path <- allruns %>%
+  group_by(scenario, run) %>%
+  summarise(avg_gini_over_time = mean(gini_score, na.rm = TRUE),
+            .groups = "drop")
+
+m_gini_path <- lmer(avg_gini_over_time ~ scenario + (1 | run), data = gini_path)
+summary(m_gini_path)
+
+
+```
+
+##Appendix
+
+Level/speed differences over time
+```{r}
+# Step-wise mean ± CI
+sum_by_step <- allruns %>%
+  group_by(scenario, step) %>%
+  summarise(
+    m  = mean(average_sustainability),
+    sd = sd(average_sustainability),
+    n  = dplyr::n_distinct(run),
+    ci = 1.96 * sd / sqrt(n),
+    .groups = "drop"
+  )
+
+
+ggplot(sum_by_step, aes(step, m, color = scenario, fill = scenario)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = m - ci, ymax = m + ci), alpha = 0.15, color = NA) +
+  labs(x = "Step", y = "Average sustainability")
+
+```
+
+Visualization of mass moving into state 3 by scenario
+```{r}
+plot_one <- function(df, ttl) {
+  ggplot(df, aes(x = step)) +
+    geom_area(aes(y = share_state3, fill = "State 3")) +
+    geom_area(aes(y = share_state3 + share_state2, fill = "State 2")) +
+    geom_area(aes(y = share_state3 + share_state2 + share_state1, fill = "State 1")) +
+    labs(title = ttl, x = "Step", y = "Share") +
+    scale_fill_manual(values = c("State 1"="#cccccc","State 2"="#999999","State 3"="#666666"))
+}
+p_social   <- allruns %>% filter(scenario=="social")   %>% plot_one("Social")
+p_campaign <- allruns %>% filter(scenario=="campaign") %>% plot_one("Campaign")
+p_econ     <- allruns %>% filter(scenario=="economic") %>% plot_one("Economic")
+p_combo    <- allruns %>% filter(scenario=="combo")    %>% plot_one("Combo")
+(p_social | p_campaign) / (p_econ | p_combo) + plot_layout(guides = "collect")
+
+```
+
+Kaplan-Meier curves for time-to-target
+```{r}
+sf <- survfit(Surv(time, status) ~ scenario, data = tt)
+ggsurvplot(sf, risk.table = TRUE, conf.int = TRUE, censor = TRUE,
+           ggtheme = theme_minimal(), legend.title = "Scenario")$plot
+
+```
+
+Ineguality (Gini) over time (with 95% CIs)
+```{r}
+gini_by_step <- allruns %>%
+  group_by(scenario, step) %>%
+  summarise(
+    m  = mean(gini_score),
+    sd = sd(gini_score),
+    n  = dplyr::n_distinct(run),
+    ci = 1.96 * sd / sqrt(n),
+    .groups = "drop"
+  )
+
+ggplot(gini_by_step, aes(step, m, color = scenario, fill = scenario)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = m - ci, ymax = m + ci), alpha = 0.15, color = NA) +
+  labs(x = "Step", y = "Gini")
+
+```
+
+Velocity and peer events
+```{r}
+vel_by_step <- allruns %>%
+  group_by(scenario, step) %>%
+  summarise(m = mean(adoption_velocity), .groups = "drop")
+events_by_step <- allruns %>%
+  group_by(scenario, step) %>%
+  summarise(m = mean(peer_influence_events), .groups = "drop")
+
+p1 <- ggplot(vel_by_step, aes(step, m, color = scenario)) + geom_line() +
+  labs(x="Step", y="Velocity (Δ mean)")
+p2 <- ggplot(events_by_step, aes(step, m, color = scenario)) + geom_line() +
+  labs(x="Step", y="Peer events")
+p1 / p2 + plot_layout(guides = "collect")
+
+```
+
+
+Tabel with symbols/notation used in methods section 
+```{r}
+symbols <- tribble(
+ ~Symbol, ~Meaning, ~Range_or_units, ~Used_in,
+ "s_i", "Agent i's behavioral state (0=none, 1=light, 2=moderate, 3=high)", "0–3", "State dynamics",
+ "H_i", "Habit strength (resistance/inertia)", "0–1", "Utility (upward/downward)",
+ "I_i", "Identity strength (sustainable-eater alignment)", "0–1", "Utility (upward)",
+ "τ_i", "Adoption threshold (required social evidence)", "0–1", "Decision rule",
+ "S_i(t)", "Neighbor influence signal (weighted mean states)", "0–3 (mapped to [0,1])", "Decision rule",
+ "w_off, w_on", "Layer weights (offline, online) with w_off + w_on = 1", "0–1", "S_i(t)",
+ "C(t)", "Campaign adstock signal", "0–∞ (scaled small)", "Utility (upward)",
+ "λ", "Adstock retention implied by half-life h", "0–1", "C(t) recursion",
+ "h", "Campaign half-life (steps)", "positive", "C(t) recursion",
+ "η_i", "Agent-level campaign susceptibility multiplier", "positive", "Utility add-on",
+ "T(t)", "Economic/tax-like pressure (endogenous)", "0–TAX_max", "Utility (upward)",
+ "A(t)", "Adoption share (s_i ≥ 1)", "0–1", "T(t) input",
+ "TAX_max", "Maximum economic pressure (cap)", "0–1 (scaled)", "T(t) shape",
+ "k", "Slope of logistic in T(t)", "positive", "T(t) shape",
+ "π", "Pivot of logistic in T(t)", "0–1", "T(t) shape",
+ "β", "Backlash scale (peer reactance strength)", "≥0", "Downward pressure",
+ "U_i^↑(t)", "Upward utility", "real", "Move s_i→s_i+1 when > 0",
+ "B_i(t)", "Downward pressure (backlash)", "≥0", "Move s_i→s_i−1 when > 0",
+ "G(t)", "Gini of sustainability", "0–1", "Equity outcome"
+)
+knitr::kable(symbols, caption = "Table B1. Symbols used in the model equations.")
+
+```
